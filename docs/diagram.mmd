@@ -1,0 +1,99 @@
+%% =====================================================================
+%% Граф RAG-системы: внешний контур, провайдеры, умение, самознание
+%% ЕДИНСТВЕННЫЙ ИСТОЧНИК СХЕМЫ (конституция п.9): правится только здесь.
+%% docs/diagram.png (make_diagram.py) — производная картинка.
+%% Задача TASKS-2 A4/A5:
+%%  - внешний контур: SQL-БД, база знаний, эмбеддер-служба, LM-провайдер;
+%%  - сквозь БД ничего не течёт: только ходки коннекторов «за ответом»;
+%%  - index-ветка свёрнута в умение prepare_knowledge_base (подграф);
+%%  - стражи на графе по событиям; узел системы самознания (маршрут status).
+%% =====================================================================
+flowchart TB
+    USER(["ПОЛЬЗОВАТЕЛЬ:<br>запрос + документ"]):::src
+    GOST(["ГОСТ/СТО —<br>внутренний вход СИСТЕМЫ"]):::src
+
+    UI["user_interface"]:::blue
+    SEC["enforce_security"]:::green
+    SCHED["schedule_checks"]:::green
+    COLLECT["collect_sources"]:::gold
+    REFRESH["refresh_corpus"]:::gold
+    PARSE["parse_document"]:::teal
+
+    subgraph SKILL["УМЕНИЕ: prepare_knowledge_base (подграф, тестируется отдельно)"]
+        CHUNK["chunk_text"]:::teal
+        EMB["embed_chunks<br>через коннектор"]:::gold
+        SV["store_vectors<br>через коннектор"]:::gold
+        EF["extract_facts (агент)<br>через коннектор"]:::gold
+        SF["store_facts<br>через коннектор"]:::gold
+        CHUNK --> EMB --> SV --> EF --> SF
+    end
+
+    RET["retrieve_fragments<br>(векторный)"]:::green
+    LIT["literal_search<br>(дословный)"]:::green
+    GR["graph_search<br>(факты и связи)"]:::green
+    RER["rerank_fragments"]:::green
+    CTX["build_context"]:::green
+    DIST["distribute_tasks"]:::green
+    VER["verify_requirement (агент)"]:::green
+    FMT["format_verdict"]:::green
+    AGG["aggregate_verdicts (агент)"]:::green
+    REP["compose_report"]:::green
+    REND["render_report"]:::green
+    FUP["handle_followup (агент)"]:::green
+    MQ["measure_quality"]:::purple
+    CHECK_END(["END"]):::endc
+
+    SA["system_self_awareness<br>(система самознания)"]:::teal
+    GUARD["стражи: guard_self_description<br>+ интеллектуальный агент<br>(по событиям графа)"]:::guardc
+
+    subgraph OUT["ВНЕШНИЙ КОНТУР — службы-провайдеры"]
+        SQLDB[["SQL-БД векторов<br>(SQLite + WAL;<br>замена на PostgreSQL —<br>смена RAG_VECTOR_DB)"]]:::gray
+        KB[["База знаний:<br>факты и связи"]]:::gray
+        EMBS[["Эмбеддер-служба<br>(Qwen3 Embedding —<br>тяжёлая, за контуром)"]]:::gray
+        LMS[["LM-провайдер:<br>API-узел агентов"]]:::gray
+    end
+
+    USER --> UI
+    UI --> SEC
+    SEC --> SCHED
+    SCHED --> PARSE
+    GOST --> COLLECT
+    UI -- "index" --> COLLECT
+    UI -- "refresh" --> REFRESH
+    REFRESH --> COLLECT
+    COLLECT --> PARSE
+    PARSE --> CHUNK
+    UI -- "status" --> SA
+    SA --> CHECK_END
+    GUARD -. "события графа:<br>node_added / node_changed" .-> UI
+
+    PARSE -- "check" --> RET
+    RET --> LIT --> GR --> RER --> CTX --> DIST --> VER --> FMT --> AGG --> REP --> REND --> FUP
+    FUP -- "если нет вопроса" --> MQ
+    MQ --> CHECK_END
+    FUP -. "цикл уточнений" .-> UI
+
+    %% ходки коннекторов к провайдерам: сквозь БД ничего не течёт
+    EMB -. "коннектор:<br>кодирование" .-> EMBS
+    SV -. "коннектор:<br>запись векторов" .-> SQLDB
+    SF -. "коннектор:<br>запись фактов" .-> KB
+    RET -. "коннектор:<br>векторный поиск" .-> SQLDB
+    LIT -. "коннектор:<br>точные совпадения" .-> SQLDB
+    GR -. "коннектор:<br>связанные факты" .-> KB
+    EF -. "коннектор:<br>агент фактов" .-> LMS
+    VER -. "коннектор:<br>агент проверки" .-> LMS
+    AGG -. "коннектор:<br>снятие конфликтов" .-> LMS
+    FUP -. "коннектор:<br>интент" .-> LMS
+
+    classDef src fill:#46545C,stroke:#2F2F2F,stroke-width:1px,color:#fff
+    classDef blue fill:#1F6FB2,stroke:#2F2F2F,stroke-width:1px,color:#fff
+    classDef green fill:#2E8B57,stroke:#2F2F2F,stroke-width:1px,color:#fff
+    classDef gold fill:#B8860B,stroke:#2F2F2F,stroke-width:1px,color:#fff
+    classDef teal fill:#00796B,stroke:#2F2F2F,stroke-width:1px,color:#fff
+    classDef gray fill:#6B6B6B,stroke:#2F2F2F,stroke-width:1px,color:#fff
+    classDef purple fill:#7D3C98,stroke:#2F2F2F,stroke-width:1px,color:#fff
+    classDef guardc fill:#B03A2E,stroke:#2F2F2F,stroke-width:1px,color:#fff
+    classDef endc fill:#E0E0E0,stroke:#2F2F2F,stroke-width:1px,color:#333
+
+    style SKILL fill:#FBF6E9,stroke:#B8860B,stroke-width:1.5px
+    style OUT fill:#F2F2F2,stroke:#6B6B6B,stroke-width:1.5px,stroke-dasharray:6 4
